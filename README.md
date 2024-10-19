@@ -1,6 +1,6 @@
 # livelox-dl
 
-Let you download map with route from a livelox event.
+download maps from livelox events
 
 # requirements
 
