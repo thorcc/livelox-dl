@@ -2,24 +2,20 @@
 const { loadImage } = require('@napi-rs/canvas');
 const url = require('url')
 const fetch = require('node-fetch')
-const express = require('express')
-const stream = require('stream')
-const { drawRoute, saveKMZ } = require('./helpers')
+const { drawRoute } = require('./helpers')
 const sharp = require('sharp');
+const fs = require('node:fs');
 
-const app = express()
-
-const getMap = async (req, res, next) => {
-    const liveloxUrl = req.body.url
-    if (!liveloxUrl.startsWith('https://www.livelox.com/')) { 
-        return res.status(400).send('invalid url domain')
-    }
+const getMap = async (liveloxUrl) => {
+    console.log("Livelox downloader")
+    console.log(`fetching: ${liveloxUrl}`)
     let classId = ''
     try {
         classId = url.parse(liveloxUrl, true).query.classId
     } catch (e) {
-        return res.status(400).send('no class id provided' )
+        return 'no class id provided'
     }
+    console.log(`classId: ${classId}`);
     let data = {}
     try {
         const res = await fetch("https://www.livelox.com/Data/ClassInfo", {
@@ -41,12 +37,13 @@ const getMap = async (req, res, next) => {
         });
         data = await res.json()
     } catch (e) {
-        return res.status(400).send('could not reach livelox server')
+        return 'could not reach livelox server'
     }
     const eventData = data.general
     const blobUrl = eventData?.classBlobUrl
+    console.log(`blobUrl: ${blobUrl}`)
     if (!blobUrl) {
-        return res.status(400).send('cannot not figure blob url')
+        return 'cannot not figure blob url'
     }
     let blobData = null
     try {
@@ -59,7 +56,7 @@ const getMap = async (req, res, next) => {
         });
         blobData = await res.json()
     } catch (e) {
-        return res.status(400).send('could not reach blob url')
+        return 'could not reach blob url'
     }
 
     let mapUrl, mapBound, mapResolution, route, mapName
@@ -71,7 +68,7 @@ const getMap = async (req, res, next) => {
         route = blobData.courses.map((c) => c.controls)
         mapName = mapData.name
     } catch (e) {
-        return res.status(400).send('could not parse livelox data')
+        return 'could not parse livelox data'
     }
     try {
         const mapImg = await loadImage(mapUrl)
@@ -81,39 +78,23 @@ const getMap = async (req, res, next) => {
         let buffer
         let mime
         let filename
-        if (!req.body.type || req.body.type === 'webp') {
-            buffer = outImgBlob
-            mime = 'image/webp'
-            filename = `${mapName}_${bounds[3].lat}_${bounds[3].lon}_${bounds[2].lat}_${bounds[2].lon}_${bounds[1].lat}_${bounds[1].lon}_${bounds[0].lat}_${bounds[0].lon}_.jpeg`
-        } else if(req.body.type === 'kmz') {
-            buffer = await saveKMZ(
-                mapName,
-                {
-                    top_left: bounds[3],
-                    top_right: bounds[2],
-                    bottom_right: bounds[1],
-                    bottom_left: bounds[0]
-                },
-                outImgBlob
-            )
-            mime = 'application/vnd.google-earth.kmz'
-            filename = `${mapName}.kmz`
-        } else {
-            return res.status(400).send('invalid type' )
-        }
-        var readStream = new stream.PassThrough()
-        readStream.end(buffer)
-        res.set('Content-disposition', 'attachment; filename="' + filename.replace(/\\/g, '_').replace(/"/g, '\\"') + '"')
-        res.set('Content-Type', mime)
-        readStream.pipe(res)
+        buffer = outImgBlob
+        mime = 'image/webp'
+        filename = `${mapName}_${bounds[3].lat}_${bounds[3].lon}_${bounds[2].lat}_${bounds[2].lon}_${bounds[1].lat}_${bounds[1].lon}_${bounds[0].lat}_${bounds[0].lon}_.jpeg`
+        fs.writeFile(filename.replace(/\\/g, '_').replace(/"/g, '\\"'), buffer, err => {
+            if (err) {
+              console.error(err);
+            } else {
+              return "file written successfully";
+            }
+        });
     } catch (e) {
-        return res.status(500).send('Something went wrong... '+e.message)
+        return 'Something went wrong... ' + e.message
     }
 }
 
-app.use(express.urlencoded({extended: true}))
-app.use(express.json())
+const get = async () => {
+    console.log(await getMap("https://www.livelox.com/Viewer/Lillomarka-Nord-Sor/Herrer-15km?classId=862192&tab=player"))
+}
 
-app.post('/api/get-map', getMap)
-
-module.exports = app
+get();
