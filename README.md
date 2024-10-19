@@ -1,13 +1,12 @@
 # livelox-dl
 
-Let you download map with route from a livelox event
+Let you download map with route from a livelox event.
 
 # Requirements
 
 - requests
 - numpy
 - pillow
-- argparse
 
 # Run
 
